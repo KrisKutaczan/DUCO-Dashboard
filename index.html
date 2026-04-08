@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DUCO Dashboard - powina1986</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --border-color: #30363d;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent-green: #2ecc71;
+            --accent-yellow: #f1c40f;
+            --accent-blue: #3498db;
+            --accent-red: #e74c3c;
+            --accent-pink: #f06292;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0; padding: 10px;
+            height: 100vh; display: flex; flex-direction: column;
+            overflow: hidden; box-sizing: border-box;
+        }
+
+        .container { flex: 1; display: flex; flex-direction: column; gap: 8px; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+        header { display: flex; justify-content: space-between; align-items: center; padding: 2px 5px; border-bottom: 1px solid var(--border-color); }
+        h1 { font-size: 16px; margin: 0; }
+        .status-line { font-size: 11px; color: var(--text-muted); }
+
+        .row-top { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; }
+        .row-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .row-counters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+
+        .card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; position: relative; }
+        .label { font-size: 9px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 5px; display: flex; justify-content: space-between; }
+        
+        .val-hash { font-size: 34px; font-weight: bold; color: var(--accent-green); text-align: center; margin: 8px 0; }
+        .val-bal { font-size: 28px; font-weight: bold; color: var(--accent-yellow); text-align: center; margin: 8px 0; }
+        .val-small { font-size: 20px; font-weight: bold; margin: 4px 0; }
+
+        .sub { font-size: 11px; text-align: center; color: var(--text-muted); }
+        .icon-box { position: absolute; right: 10px; top: 15px; font-size: 14px; opacity: 0.6; }
+        .duco-icon { display: inline-flex; width: 18px; height: 18px; background: var(--accent-yellow); color: black; border-radius: 50%; align-items: center; justify-content: center; font-weight: bold; font-size: 11px; margin-left: 5px; vertical-align: middle; }
+
+        .chart-section { 
+    flex: 2; 
+    min-height: 160px; 
+    max-height: 300px; /* Dodaj to, żeby trzymać wykres w ryzach na PC */
+    position: relative; 
+}
+        /* Zmiana na 3 kolumny w dolnym rzędzie */
+        .row-bottom { display: grid; grid-template-columns: 1.2fr 1fr 0.8fr; gap: 10px; flex: 1.5; min-height: 0;max-height: 200px;}
+        .scroll-box { overflow-y: auto; font-size: 11px; height: 100%; }
+        
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; color: var(--text-muted); padding: 4px; border-bottom: 1px solid var(--border-color); font-size: 10px; }
+        td { padding: 5px; border-bottom: 1px solid #1f242b; }
+        
+        .status-ok { color: var(--accent-green); font-size: 10px; margin-left: 4px; }
+        .tx-in { color: var(--accent-green); }
+        .tx-out { color: var(--accent-red); }
+
+@media (max-width: 800px) {
+    body {
+        height: auto !important;
+        overflow-y: auto !important;
+    }
+    .chart-section {
+        height: 220px !important;
+        flex: none !important;
+    }
+    .row-bottom {
+        /* Na telefonie wyłączamy blokadę 200px */
+        max-height: none !important; 
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    /* Na telefonie wyłączamy wewnętrzne suwaki w kartach, bo przewijasz całą stronę */
+    .scroll-box {
+        height: auto !important;
+        overflow-y: visible !important;
+    }
+}
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+<header>
+    <h1>DUCO Dashboard made by powina1986</h1>
+<div class="status-line">
+    Duco User Name: <input type="text" id="user-input" value="" 
+           style="background: #0d1117; color: var(--accent-blue); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; font-weight: bold; width: 90px;">
+    Account Age: <input type="date" id="date-input" 
+           style="background: #0d1117; color: var(--accent-pink); border: 1px solid var(--border-color); border-radius: 4px; padding: 1px 5px; font-size: 10px; width: 110px;">
+    <button onclick="changeUser()" style="background: var(--accent-blue); color: white; border: none; border-radius: 4px; cursor: pointer; padding: 2px 8px; font-size: 10px;">OK</button>
+    | <span id="api-status">Calculating...</span>
+</div>
+</header>
+
+    <div class="row-top">
+        <div class="card">
+            <div class="label"><span>LIVE HASHRATE</span> <span style="color: var(--accent-blue)" id="live-time">--:--:--</span></div>
+            <div class="val-hash" id="hash-val">0.00 kH/s</div>
+            <div class="sub">Avg: <span id="avg-val" style="color:white">0.00 kH/s</span> | Rig: <span style="color:white">ESP Mix</span></div>
+        </div>
+        <div class="card" style="border-color: var(--accent-yellow)">
+            <div class="label" style="color: var(--accent-yellow)">LIVE BALANCE</div>
+            <div class="val-bal" id="bal-val">0.00 <div class="duco-icon">Đ</div></div>
+            <div class="sub">Value: <span id="val-usd" style="color:var(--accent-green)">$0.00</span> | <span id="val-pln" style="color:white">0.00 zł</span></div>
+        </div>
+    </div>
+
+    <div class="row-stats">
+        <div class="card">
+            <div class="label">GLOBAL HASHRATE</div>
+            <div class="val-small" id="global-hash">0.000 MH/s</div>
+            <i class="fas fa-globe icon-box" style="color: var(--accent-blue)"></i>
+        </div>
+        <div class="card">
+            <div class="label">ACTIVE MINERS</div>
+            <div class="val-small" id="global-miners">0</div>
+            <i class="fas fa-users icon-box" style="color: #9b59b6"></i>
+        </div>
+        <div class="card" style="border-color: rgba(240, 98, 146, 0.3)">
+            <div class="label" style="color: var(--accent-pink)">YOUR NETWORK SHARE</div>
+            <div class="val-small" style="color: var(--accent-pink)" id="net-share">0.00%</div>
+            <i class="fas fa-gem icon-box" style="color: var(--accent-blue)"></i>
+        </div>
+    </div>
+
+    <div class="row-counters">
+        <div class="card"><div class="label">ACCEPTED</div><div class="val-small" style="color: var(--accent-blue)" id="acc">0</div></div>
+        <div class="card"><div class="label">REJECTED</div><div class="val-small" style="color: var(--accent-red)" id="rej">0</div></div>
+        <div class="card"><div class="label">EST. PROFIT (24H)</div><div class="val-small" id="profit-val">0.00 Đ</div></div>
+        <div class="card"><div class="label">TOTAL SHARES / MIN</div><div class="val-small" id="spm">0.0</div></div>
+    </div>
+
+    <div class="card chart-section">
+        <div class="label">HASHRATE TREND (LIVE)</div>
+        <div style="height: calc(100% - 20px)"><canvas id="mainChart"></canvas></div>
+    </div>
+
+    <div class="row-bottom">
+        <div class="card scroll-box">
+            <div class="label">MINER DETAILS & RECENT SHARES</div>
+            <table id="shares-table">
+                <thead>
+                    <tr>
+                        <th>Software</th>
+                        <th>Hashrate</th>
+                        <th>Accepted</th>
+                        <th>Rejected</th><th>Shares/Min</th>
+                        <th>Diff</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div class="card scroll-box">
+            <div class="label" style="color: var(--accent-yellow)">LAST TRANSACTIONS</div>
+            <table id="tx-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>User</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+<div class="card scroll-box">
+    <div class="label" style="color: var(--accent-red)">REJECTED LOG</div>
+    <table id="logs-table">
+        <thead>
+            <tr><th>Time</th><th>Reason</th></tr>
+        </thead>
+        <tbody id="logs-body"> <tr><td colspan="2" style="text-align:center">No issue</td></tr>
+        </tbody>
+    </table>
+</div>
+    </div>
+</div>
+
+<script>
+    // Używamy LET, żeby dało się zmieniać wartości
+    let USER = ""; 
+    let accountCreatedDate = new Date("2026-03-05");
+	let lastRejectedTotal = 0;
+
+    function changeUser() {
+        const inputVal = document.getElementById('user-input').value.trim();
+        const dateVal = document.getElementById('date-input').value;
+
+        if (inputVal && inputVal !== "") {
+            USER = inputVal;
+            
+            // Jeśli w kalendarzu jest data, parsujemy ją
+            if (dateVal) {
+                accountCreatedDate = new Date(dateVal);
+            }
+
+            // RESET WSZYSTKIEGO (żeby nie było błędów w obliczeniach)
+            hData = []; 
+            hLabels = [];
+            totalHashSum = 0;
+            readingCount = 0;
+            initialAccepted = -1;
+            minerStats = {};
+			lastRejectedTotal = 0;
+            document.getElementById('logs-body').innerHTML = '<tr><td colspan="2" style="text-align:center">No issue</td></tr>';
+            
+            // Ważne: czyścimy wykres przed update
+            chart.data.labels = hLabels;
+            chart.data.datasets[0].data = hData;
+            chart.update(); 
+
+            update(); // Odpalamy pobieranie danych
+            console.log("Przełączono na: " + USER);
+        }
+    }
+
+    // Pozostałe zmienne pomocnicze (też jako let)
+    const startTimeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+    let hData = [], hLabels = [], ducoPrice = 0, plnRate = 4.10;
+    let totalHashSum = 0, readingCount = 0;
+    let startTime = Date.now(), initialAccepted = -1;
+    let minerStats = {};
+
+const ctx = document.getElementById('mainChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: hLabels,
+            datasets: [{
+                borderColor: '#2ecc71',
+                backgroundColor: 'rgba(46, 204, 113, 0.05)',
+                borderWidth: 2,
+                data: hData,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { 
+                    grid: { color: '#1f242b' }, 
+                    ticks: { 
+                        color: '#8b949e', 
+                        font: { size: 9 }, 
+                        maxRotation: 0,
+                        autoSkip: true,
+                        autoSkipPadding: 20,
+                        maxTicksLimit: 7
+                    } 
+                },
+                y: { 
+                    grid: { color: '#1f242b' }, 
+                    ticks: { color: '#8b949e', font: { size: 9 } } 
+                }
+            }
+        }
+    });
+
+    async function getPrices() {
+        try {
+            const api = await fetch('https://server.duinocoin.com/api.json').then(r => r.json());
+            ducoPrice = api["Duco price"];
+            document.getElementById('global-hash').innerText = api["Pool hashrate"];
+            document.getElementById('global-miners').innerText = api["Registered users"];
+            const nbp = await fetch('https://api.nbp.pl/api/exchangerates/rates/a/usd/?format=json').then(r => r.json());
+            plnRate = nbp.rates[0].mid;
+        } catch(e) {}
+    }
+
+    async function update() {
+        try {
+            const res = await fetch(`https://server.duinocoin.com/users/${USER}`).then(r => r.json());
+            if(!res.success) return;
+
+            const bal = res.result.balance;
+            const miners = res.result.miners;
+            const transactions = res.result.transactions;
+            const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+
+// Obliczanie wieku konta - BEZPIECZNE
+            const nowTime = new Date();
+            let diffDays = 0;
+            
+            if (accountCreatedDate && !isNaN(accountCreatedDate)) {
+                const diffTime = Math.abs(nowTime - accountCreatedDate);
+                diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            }
+
+            document.getElementById('api-status').innerHTML = 
+                `Age: <span style="color:var(--accent-pink)">${diffDays} days</span> | Status: <span style="color:var(--accent-green)">Mining</span>`;
+
+            let currentTotalHash = 0, currentAccepted = 0, rej = 0, rows = "";
+            let minutesActive = (Date.now() - startTime) / 60000;
+
+miners.forEach((m, index) => {
+    const minerId = m.software + "_" + index;
+    if (!minerStats[minerId]) {
+        minerStats[minerId] = { startAcc: m.accepted, startTime: Date.now() };
+    }
+    let mMinutesActive = (Date.now() - minerStats[minerId].startTime) / 60000;
+    let mNewShares = m.accepted - minerStats[minerId].startAcc;
+    let mSpm = mMinutesActive > 0 ? (mNewShares / mMinutesActive) : 0;
+
+    currentTotalHash += m.hashrate;
+    currentAccepted += m.accepted;
+    rej += m.rejected; // To sumuje odrzuty do głównego licznika na górze
+
+    rows += `<tr>
+        <td>${m.software} <i class="fas fa-check-circle status-ok"></i></td>
+        <td style="color:var(--accent-green)">${(m.hashrate/1000).toFixed(2)}k</td>
+        <td>${m.accepted}</td>
+        <td style="color:var(--accent-red)">${m.rejected}</td> <td style="color:var(--accent-blue)">${mSpm.toFixed(1)}</td>
+        <td>${m.diff}</td>
+    </tr>`;
+});
+
+	// Generowanie wierszy transakcji (Nowe na górze)
+            let txRows = "";
+            transactions.slice(0, 10).forEach(tx => {
+                const isIncoming = tx.recipient === USER;
+                const txUser = isIncoming ? tx.sender : tx.recipient;
+                const txSign = isIncoming ? "+" : "-";
+                const txClass = isIncoming ? "tx-in" : "tx-out";
+                
+                // Zmieniona kolejność doklejania (Nowy wiersz + stara zawartość)
+                txRows = `<tr>
+                    <td style="color:var(--text-muted)">${tx.datetime.split(' ')[0]}</td>
+                    <td>${txUser}</td>
+                    <td class="${txClass}">${txSign}${tx.amount.toFixed(2)}</td>
+                </tr>` + txRows;
+            });
+            document.getElementById('tx-table').querySelector('tbody').innerHTML = txRows;
+
+            const khs = currentTotalHash / 1000;
+            readingCount++; totalHashSum += khs;
+            const avg = totalHashSum / readingCount;
+
+            if (initialAccepted === -1) initialAccepted = currentAccepted;
+            let totalSpm = ((currentAccepted - initialAccepted) / minutesActive) || 0;
+
+            document.getElementById('hash-val').innerText = `${khs.toFixed(2)} kH/s`;
+            document.getElementById('avg-val').innerText = `${avg.toFixed(2)} kH/s`;
+            document.getElementById('spm').innerText = totalSpm.toFixed(2);
+            document.getElementById('acc').innerText = currentAccepted;
+            document.getElementById('rej').innerText = rej;
+			// --- LOGIKA REJECTED LOG START ---
+            if (rej > lastRejectedTotal && lastRejectedTotal !== 0) {
+                const logsBody = document.getElementById('logs-body');
+                
+                // TA LINIA JEST KLUCZOWA:
+                // Jeśli w środku jest "No issue", czyścimy to przed dodaniem pierwszego błędu
+                if (logsBody.innerHTML.includes("No issue")) {
+                    logsBody.innerHTML = "";
+                }
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td style="color: var(--accent-red)">${now}</td>
+                    <td>Bad share / Network error (+${rej - lastRejectedTotal})</td>
+                `;
+                
+                logsBody.insertBefore(row, logsBody.firstChild);
+            }
+            lastRejectedTotal = rej; // Aktualizujemy licznik
+            // --- LOGIKA REJECTED LOG KONIEC ---
+            document.getElementById('bal-val').innerHTML = `${bal.balance.toFixed(2)} <div class="duco-icon">Đ</div>`;
+            document.getElementById('val-usd').innerText = `$${(bal.balance * ducoPrice).toFixed(4)}`;
+            document.getElementById('val-pln').innerText = `${(bal.balance * ducoPrice * plnRate).toFixed(2)} zł`;
+            document.getElementById('live-time').innerText = now;
+            document.getElementById('shares-table').querySelector('tbody').innerHTML = rows;
+
+            const estProfit = (khs / 100) * 7.5; 
+            document.getElementById('profit-val').innerText = `${estProfit.toFixed(2)} Đ`;
+            document.getElementById('net-share').innerText = `${((khs/2800000)*100).toFixed(6)}%`;
+
+// Logika etykiet: Pełna godzina tylko dla Startu i co kilka punktów, żeby nie było ścisku
+            let labelToShow = "";
+            
+            if (hData.length === 0) {
+                // To pokaże się tylko raz na samym początku wykresu
+                labelToShow = "Start: " + startTimeStr;
+            } else {
+                // Co 10 punktów (czyli co 50 sekund) pokazuj aktualną godzinę HH:MM:SS
+                // Dzięki temu oś X nie będzie "napaćkana" cyframi
+                labelToShow = (hData.length % 10 === 0) ? now : "";
+            }
+
+            // Limit 5 minut (60 punktów x 5s)
+            if(hData.length >= 60) { 
+                hData.shift(); 
+                hLabels.shift(); 
+            }
+
+            hData.push(khs); 
+            hLabels.push(now);
+            chart.update();
+            
+        } catch(e) { 
+            console.log("Błąd aktualizacji:", e); 
+        }
+    } // Ta klamra zamyka całą funkcję async function update()
+
+    getPrices();
+    setInterval(getPrices, 300000);
+    setInterval(update, 5000);
+    update();
+</script>
+
+</body>
+</html>
