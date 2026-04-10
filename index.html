@@ -96,7 +96,7 @@
 
 <div class="container">
 <header>
-    <h1>DUCO Dashboard made by powina1986 v1.2</h1>
+    <h1>DUCO Dashboard made by powina1986 v1.4</h1>
 <div class="status-line">
     Duco User Name: <input type="text" id="user-input" value="" 
            style="background: #0d1117; color: var(--accent-blue); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; font-weight: bold; width: 90px;">
@@ -195,46 +195,58 @@
 </div>
 
 <script>
-    // Używamy LET, żeby dało się zmieniać wartości
+    // 1. Deklaracja wszystkich zmiennych globalnych (TYLKO RAZ)
     let USER = ""; 
-	let balanceAtStart = -1; 
-	let timeAtStart = Date.now();
+    let balanceAtStart = -1; 
+    let timeAtStart = Date.now();
     let accountCreatedDate = new Date("2026-03-05");
-	let lastRejectedTotal = 0;
-	
-// Funkcja zapisująca ciacho (na 365 dni)
-function setCookie(name, value) {
-    const d = new Date();
-    d.setTime(d.getTime() + (365*24*60*60*1000));
-    let expires = "expires="+ d.toUTCString();
-    document.cookie = name + "=" + value + ";" + expires + ";path=/";
-}
+    let lastRejectedTotal = 0;
+    let plnRate = 0;
+    let eurRate = 0;
+    let ducoPrice = 0;
+    let hData = [];
+    let hLabels = [];
+    let totalHashSum = 0;
+    let readingCount = 0;
+    let startTime = Date.now();
+    let initialAccepted = -1;
+    let minerStats = {};
+    const startTimeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
 
-// Funkcja wyciągająca wartość z ciacha
-function getCookie(name) {
-    let nameEQ = name + "=";
-    let ca = document.cookie.split(';');
-    for(let i=0; i < ca.length; i++) {
-        let c = ca[i];
-        while (c.charAt(0)==' ') c = c.substring(1,c.length);
-        if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+    // Funkcja zapisująca ciacho (na 365 dni)
+    function setCookie(name, value) {
+        const d = new Date();
+        d.setTime(d.getTime() + (365*24*60*60*1000));
+        let expires = "expires="+ d.toUTCString();
+        document.cookie = name + "=" + value + ";" + expires + ";path=/";
     }
-    return null;
-}
 
-function changeUser() {
+    // Funkcja wyciągająca wartość z ciacha
+    function getCookie(name) {
+        let nameEQ = name + "=";
+        let ca = document.cookie.split(';');
+        for(let i=0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0)==' ') c = c.substring(1,c.length);
+            if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+        }
+        return null;
+    }
+
+    function changeUser() {
         const inputVal = document.getElementById('user-input').value.trim();
         const dateVal = document.getElementById('date-input').value;
 
         if (inputVal && inputVal !== "") {
             USER = inputVal;
-			
-			// ZAPISYWANIE DO CIASTECZEK
-        setCookie("duco_user", USER);
-        if (dateVal) {
-            accountCreatedDate = new Date(dateVal);
-            setCookie("duco_date", dateVal);
-        }
+            
+            // ZAPISYWANIE DO CIASTECZEK
+            setCookie("duco_user", USER);
+            if (dateVal) {
+                accountCreatedDate = new Date(dateVal);
+                setCookie("duco_date", dateVal);
+            }
+            
             // RESET WSZYSTKIEGO
             hData = []; 
             hLabels = [];
@@ -244,10 +256,9 @@ function changeUser() {
             minerStats = {};
             lastRejectedTotal = 0;
             
-            // --- NOWE RESETOWANIE DLA ZYSKU ---
+            // RESETOWANIE DLA ZYSKU
             balanceAtStart = -1;
             timeAtStart = Date.now();
-            // ----------------------------------
 
             document.getElementById('logs-body').innerHTML = '<tr><td colspan="2" style="text-align:center">No issue</td></tr>';
             
@@ -260,14 +271,8 @@ function changeUser() {
         }
     }
 
-    // Pozostałe zmienne pomocnicze (też jako let)
-    const startTimeStr = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-    let hData = [], hLabels = [], ducoPrice = 0, plnRate = 4.10;
-    let totalHashSum = 0, readingCount = 0;
-    let startTime = Date.now(), initialAccepted = -1;
-    let minerStats = {};
-
-const ctx = document.getElementById('mainChart').getContext('2d');
+    // Inicjalizacja wykresu
+    const ctx = document.getElementById('mainChart').getContext('2d');
     const chart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -312,12 +317,24 @@ const ctx = document.getElementById('mainChart').getContext('2d');
             ducoPrice = api["Duco price"];
             document.getElementById('global-hash').innerText = api["Pool hashrate"];
             document.getElementById('global-miners').innerText = api["Registered users"];
-            const nbp = await fetch('https://api.nbp.pl/api/exchangerates/rates/a/usd/?format=json').then(r => r.json());
-            plnRate = nbp.rates[0].mid;
-        } catch(e) {}
+
+            // Pobieramy kurs USD (dla złotówek)
+            const nbpUsd = await fetch('https://api.nbp.pl/api/exchangerates/rates/a/usd/?format=json').then(r => r.json());
+            plnRate = nbpUsd.rates[0].mid;
+
+            // Pobieramy kurs EUR (żeby obliczyć ile Euro wart jest dolar)
+            const nbpEur = await fetch('https://api.nbp.pl/api/exchangerates/rates/a/eur/?format=json').then(r => r.json());
+            const eurInPln = nbpEur.rates[0].mid;
+            
+            // Obliczamy kurs USD względem EUR
+            eurRate = plnRate / eurInPln; 
+
+        } catch(e) {
+            console.log("Error downloading courses:", e);
+        }
     }
 
-    async function update() {
+async function update() {
         try {
             const res = await fetch(`https://server.duinocoin.com/users/${USER}`).then(r => r.json());
             if(!res.success) return;
@@ -327,10 +344,8 @@ const ctx = document.getElementById('mainChart').getContext('2d');
             const transactions = res.result.transactions;
             const now = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
 
-// Obliczanie wieku konta - BEZPIECZNE
             const nowTime = new Date();
             let diffDays = 0;
-            
             if (accountCreatedDate && !isNaN(accountCreatedDate)) {
                 const diffTime = Math.abs(nowTime - accountCreatedDate);
                 diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -339,40 +354,51 @@ const ctx = document.getElementById('mainChart').getContext('2d');
             document.getElementById('api-status').innerHTML = 
                 `Age: <span style="color:var(--accent-pink)">${diffDays} days</span> | Status: <span style="color:var(--accent-green)">Mining</span>`;
 
-            let currentTotalHash = 0, currentAccepted = 0, rej = 0, rows = "";
+            let currentTotalHash = 0, currentAccepted = 0, totalRejFromApi = 0, rows = "";
             let minutesActive = (Date.now() - startTime) / 60000;
 
-miners.forEach((m, index) => {
-    const minerId = m.software + "_" + index;
-    if (!minerStats[minerId]) {
-        minerStats[minerId] = { startAcc: m.accepted, startTime: Date.now() };
-    }
-    let mMinutesActive = (Date.now() - minerStats[minerId].startTime) / 60000;
-    let mNewShares = m.accepted - minerStats[minerId].startAcc;
-    let mSpm = mMinutesActive > 0 ? (mNewShares / mMinutesActive) : 0;
+            // 1. Najpierw sumujemy błędy ze wszystkich koparek
+            miners.forEach(m => { totalRejFromApi += m.rejected; });
 
-    currentTotalHash += m.hashrate;
-    currentAccepted += m.accepted;
-    rej += m.rejected; // To sumuje odrzuty do głównego licznika na górze
+            // 2. Jeśli to pierwszy raz, ustawiamy punkt zero (np. te Twoje 9 błędów)
+            if (lastRejectedTotal === 0 || lastRejectedTotal === -1) {
+                lastRejectedTotal = totalRejFromApi;
+            }
 
-    rows += `<tr>
-        <td>${m.software} <i class="fas fa-check-circle status-ok"></i></td>
-        <td style="color:var(--accent-green)">${(m.hashrate/1000).toFixed(2)}k</td>
-        <td>${m.accepted}</td>
-        <td style="color:var(--accent-red)">${m.rejected}</td> <td style="color:var(--accent-blue)">${mSpm.toFixed(1)}</td>
-        <td>${m.diff}</td>
-    </tr>`;
-});
+            // 3. To będziemy pokazywać na liczniku (różnica między teraz a startem)
+            let sessionRej = totalRejFromApi - lastRejectedTotal;
 
-	// Generowanie wierszy transakcji (Nowe na górze)
+            miners.forEach((m, index) => {
+                const minerId = m.software + "_" + index;
+                if (!minerStats[minerId]) {
+                    // Zapamiętujemy też rejected per miner przy starcie
+                    minerStats[minerId] = { startAcc: m.accepted, startRej: m.rejected, startTime: Date.now() };
+                }
+                let mMinutesActive = (Date.now() - minerStats[minerId].startTime) / 60000;
+                let mNewShares = m.accepted - minerStats[minerId].startAcc;
+                let mNewRej = m.rejected - minerStats[minerId].startRej; // Błędy tej koparki od startu strony
+                let mSpm = mMinutesActive > 0 ? (mNewShares / mMinutesActive) : 0;
+
+                currentTotalHash += m.hashrate;
+                currentAccepted += m.accepted;
+
+                rows += `<tr>
+                    <td>${m.software} <i class="fas fa-check-circle status-ok"></i></td>
+                    <td style="color:var(--accent-green)">${(m.hashrate/1000).toFixed(2)}k</td>
+                    <td>${m.accepted}</td>
+                    <td style="color:var(--accent-red)">${mNewRej}</td> 
+                    <td style="color:var(--accent-blue)">${mSpm.toFixed(1)}</td>
+                    <td>${m.diff}</td>
+                </tr>`;
+            });
+
+            // Generowanie transakcji (zachowane Twoje)
             let txRows = "";
             transactions.slice(0, 10).forEach(tx => {
                 const isIncoming = tx.recipient === USER;
                 const txUser = isIncoming ? tx.sender : tx.recipient;
                 const txSign = isIncoming ? "+" : "-";
                 const txClass = isIncoming ? "tx-in" : "tx-out";
-                
-                // Zmieniona kolejność doklejania (Nowy wiersz + stara zawartość)
                 txRows = `<tr>
                     <td style="color:var(--text-muted)">${tx.datetime.split(' ')[0]}</td>
                     <td>${txUser}</td>
@@ -392,103 +418,68 @@ miners.forEach((m, index) => {
             document.getElementById('avg-val').innerText = `${avg.toFixed(2)} kH/s`;
             document.getElementById('spm').innerText = totalSpm.toFixed(2);
             document.getElementById('acc').innerText = currentAccepted;
-            document.getElementById('rej').innerText = rej;
-			// --- LOGIKA REJECTED LOG START ---
-            if (rej > lastRejectedTotal && lastRejectedTotal !== 0) {
+            
+            // KLUCZOWA ZMIANA: Wyświetlamy błędy sesji (od zera)
+            document.getElementById('rej').innerText = sessionRej;
+
+            // Logika Rejected Log (korzysta z sumy całkowitej, żeby wiedzieć czy przybyło coś nowego)
+            // Ale porównujemy to do lastRejectedTotal, który zaktualizuje się tylko gdy wpadnie realny nowy błąd
+            if (totalRejFromApi > lastRejectedTotal) {
                 const logsBody = document.getElementById('logs-body');
-                
-                // TA LINIA JEST KLUCZOWA:
-                // Jeśli w środku jest "No issue", czyścimy to przed dodaniem pierwszego błędu
-                if (logsBody.innerHTML.includes("No issue")) {
-                    logsBody.innerHTML = "";
-                }
+                if (logsBody.innerHTML.includes("No issue")) logsBody.innerHTML = "";
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td style="color: var(--accent-red)">${now}</td>
-                    <td>Bad share / Network error (+${rej - lastRejectedTotal})</td>
+                    <td>Bad share / Network error (+${totalRejFromApi - lastRejectedTotal})</td>
                 `;
-                
                 logsBody.insertBefore(row, logsBody.firstChild);
+                lastRejectedTotal = totalRejFromApi; // Teraz aktualizujemy, żeby log pokazał tylko nową różnicę
             }
-            lastRejectedTotal = rej; // Aktualizujemy licznik
-            // --- LOGIKA REJECTED LOG KONIEC ---
+
+            const valUsd = bal.balance * ducoPrice;
+            const valEur = valUsd * eurRate;
+            const valPln = valUsd * plnRate;
+
             document.getElementById('bal-val').innerHTML = `${bal.balance.toFixed(2)} <div class="duco-icon">Đ</div>`;
-            document.getElementById('val-usd').innerText = `$${(bal.balance * ducoPrice).toFixed(4)}`;
-            document.getElementById('val-pln').innerText = `${(bal.balance * ducoPrice * plnRate).toFixed(2)} zł`;
+            document.getElementById('val-usd').innerText = `$${valUsd.toFixed(4)}`;
+            document.getElementById('val-pln').innerText = `${valEur.toFixed(2)} € | ${valPln.toFixed(2)} zł`;
             document.getElementById('live-time').innerText = now;
             document.getElementById('shares-table').querySelector('tbody').innerHTML = rows;
 
-            //const estProfit = (khs / 100) * 7.5; 
-			// --- NOWA LOGIKA EST. PROFIT (BAZOWANA NA PRZYROŚCIE) ---
-			let currentBalance = bal.balance;
-			if (balanceAtStart === -1) balanceAtStart = currentBalance;
-
-			let minutesPassed = (Date.now() - timeAtStart) / 60000;
-			let earnedSoFar = currentBalance - balanceAtStart;
-			let estProfit = 0;
-
-			if (minutesPassed > 0.5) { // Zacznij liczyć po 30 sekundach od startu
-			estProfit = (earnedSoFar / minutesPassed) * 1440;
-			} else {
-			// Tymczasowy szacunek przez pierwsze 30 sekund (stary wzór)
-			estProfit = (khs / 100) * 7.5;
-			}
-			document.getElementById('profit-val').innerText = `${estProfit.toFixed(2)} Đ`;
-			// --- KONIEC NOWEJ LOGIKI ---
+            let currentBalance = bal.balance;
+            if (balanceAtStart === -1) balanceAtStart = currentBalance;
+            let minutesPassed = (Date.now() - timeAtStart) / 60000;
+            let earnedSoFar = currentBalance - balanceAtStart;
+            let estProfit = (minutesPassed > 0.5) ? (earnedSoFar / minutesPassed) * 1440 : (khs / 100) * 7.5;
+            document.getElementById('profit-val').innerText = `${estProfit.toFixed(2)} Đ`;
             document.getElementById('net-share').innerText = `${((khs/2800000)*100).toFixed(6)}%`;
 
-// Logika etykiet: Pełna godzina tylko dla Startu i co kilka punktów, żeby nie było ścisku
-            let labelToShow = "";
-            
-            if (hData.length === 0) {
-                // To pokaże się tylko raz na samym początku wykresu
-                labelToShow = "Start: " + startTimeStr;
-            } else {
-                // Co 10 punktów (czyli co 50 sekund) pokazuj aktualną godzinę HH:MM:SS
-                // Dzięki temu oś X nie będzie "napaćkana" cyframi
-                labelToShow = (hData.length % 10 === 0) ? now : "";
-            }
-
-            // Limit 5 minut (60 punktów x 5s)
-            if(hData.length >= 60) { 
-                hData.shift(); 
-                hLabels.shift(); 
-            }
-
-            hData.push(khs); 
-            hLabels.push(now);
+            let labelToShow = (hData.length === 0) ? "Start: " + startTimeStr : ((hData.length % 10 === 0) ? now : "");
+            if(hData.length >= 60) { hData.shift(); hLabels.shift(); }
+            hData.push(khs); hLabels.push(labelToShow);
             chart.update();
-            
-        } catch(e) { 
-            console.log("Błąd aktualizacji:", e); 
-        }
-    } // Ta klamra zamyka całą funkcję async function update()
+
+        } catch(e) { console.log("Błąd aktualizacji:", e); }
+    }
 
     getPrices();
     setInterval(getPrices, 300000);
     setInterval(update, 5000);
-	
-	// Ta funkcja odpala się raz przy każdym wejściu na stronę / odświeżeniu
-window.onload = function() {
-    const savedUser = getCookie("duco_user");
-    const savedDate = getCookie("duco_date");
-
-    if (savedUser) {
-        USER = savedUser;
-        document.getElementById('user-input').value = savedUser;
-    }
     
-    if (savedDate) {
-        accountCreatedDate = new Date(savedDate);
-        document.getElementById('date-input').value = savedDate;
-    }
-
-    // Jeśli dane zostały wczytane, od razu pobierz statystyki
-    if (USER) {
-        update();
-    }
-};
+    window.onload = function() {
+        const savedUser = getCookie("duco_user");
+        const savedDate = getCookie("duco_date");
+        if (savedUser) {
+            USER = savedUser;
+            document.getElementById('user-input').value = savedUser;
+        }
+        if (savedDate) {
+            accountCreatedDate = new Date(savedDate);
+            document.getElementById('date-input').value = savedDate;
+        }
+        if (USER) { update(); }
+    };
 </script>
 
 </body>
