@@ -96,7 +96,7 @@
 
 <div class="container">
 <header>
-    <h1>DUCO Dashboard made by powina1986 v1.1</h1>
+    <h1>DUCO Dashboard made by powina1986 v1.2</h1>
 <div class="status-line">
     Duco User Name: <input type="text" id="user-input" value="" 
            style="background: #0d1117; color: var(--accent-blue); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; font-weight: bold; width: 90px;">
@@ -201,6 +201,26 @@
 	let timeAtStart = Date.now();
     let accountCreatedDate = new Date("2026-03-05");
 	let lastRejectedTotal = 0;
+	
+// Funkcja zapisująca ciacho (na 365 dni)
+function setCookie(name, value) {
+    const d = new Date();
+    d.setTime(d.getTime() + (365*24*60*60*1000));
+    let expires = "expires="+ d.toUTCString();
+    document.cookie = name + "=" + value + ";" + expires + ";path=/";
+}
+
+// Funkcja wyciągająca wartość z ciacha
+function getCookie(name) {
+    let nameEQ = name + "=";
+    let ca = document.cookie.split(';');
+    for(let i=0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0)==' ') c = c.substring(1,c.length);
+        if (c.indexOf(nameEQ) == 0) return c.substring(nameEQ.length,c.length);
+    }
+    return null;
+}
 
 function changeUser() {
         const inputVal = document.getElementById('user-input').value.trim();
@@ -208,11 +228,13 @@ function changeUser() {
 
         if (inputVal && inputVal !== "") {
             USER = inputVal;
-            
-            if (dateVal) {
-                accountCreatedDate = new Date(dateVal);
-            }
-
+			
+			// ZAPISYWANIE DO CIASTECZEK
+        setCookie("duco_user", USER);
+        if (dateVal) {
+            accountCreatedDate = new Date(dateVal);
+            setCookie("duco_date", dateVal);
+        }
             // RESET WSZYSTKIEGO
             hData = []; 
             hLabels = [];
@@ -446,7 +468,27 @@ miners.forEach((m, index) => {
     getPrices();
     setInterval(getPrices, 300000);
     setInterval(update, 5000);
-    update();
+	
+	// Ta funkcja odpala się raz przy każdym wejściu na stronę / odświeżeniu
+window.onload = function() {
+    const savedUser = getCookie("duco_user");
+    const savedDate = getCookie("duco_date");
+
+    if (savedUser) {
+        USER = savedUser;
+        document.getElementById('user-input').value = savedUser;
+    }
+    
+    if (savedDate) {
+        accountCreatedDate = new Date(savedDate);
+        document.getElementById('date-input').value = savedDate;
+    }
+
+    // Jeśli dane zostały wczytane, od razu pobierz statystyki
+    if (USER) {
+        update();
+    }
+};
 </script>
 
 </body>
