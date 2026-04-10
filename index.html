@@ -391,7 +391,7 @@ async function update() {
                     <td>${m.software} <i class="fas fa-check-circle status-ok"></i></td>
                     <td style="color:var(--accent-green)">${(m.hashrate/1000).toFixed(2)}k</td>
                     <td>${m.accepted}</td>
-                    <td style="color:var(--accent-red)">${mNewRej}</td> 
+                    <td style="color:var(--accent-red)">${m.rejected}</td> 
                     <td style="color:var(--accent-blue)">${mSpm.toFixed(1)}</td>
                     <td>${m.diff}</td>
                 </tr>`;
@@ -425,7 +425,7 @@ async function update() {
             document.getElementById('acc').innerText = currentAccepted;
             
             // KLUCZOWA ZMIANA: Wyświetlamy błędy sesji (od zera)
-            document.getElementById('rej').innerText = sessionRej;
+            document.getElementById('rej').innerText = totalRejFromApi;
 
             // Logika Rejected Log (korzysta z sumy całkowitej, żeby wiedzieć czy przybyło coś nowego)
             // Ale porównujemy to do lastRejectedTotal, który zaktualizuje się tylko gdy wpadnie realny nowy błąd
