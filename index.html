@@ -367,6 +367,11 @@ async function update() {
 
             // 3. To będziemy pokazywać na liczniku (różnica między teraz a startem)
             let sessionRej = totalRejFromApi - lastRejectedTotal;
+			if (sessionRej < 0) {
+			// Jeśli serwer zresetował liczniki, my też resetujemy punkt odniesienia
+			lastRejectedTotal = totalRejFromApi;
+			sessionRej = 0;
+			}
 
             miners.forEach((m, index) => {
                 const minerId = m.software + "_" + index;
@@ -376,7 +381,7 @@ async function update() {
                 }
                 let mMinutesActive = (Date.now() - minerStats[minerId].startTime) / 60000;
                 let mNewShares = m.accepted - minerStats[minerId].startAcc;
-                let mNewRej = m.rejected - minerStats[minerId].startRej; // Błędy tej koparki od startu strony
+                let mNewRej = Math.max(0, m.rejected - minerStats[minerId].startRej); // Błędy tej koparki od startu strony
                 let mSpm = mMinutesActive > 0 ? (mNewShares / mMinutesActive) : 0;
 
                 currentTotalHash += m.hashrate;
