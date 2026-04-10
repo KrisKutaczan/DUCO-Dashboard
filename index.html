@@ -96,7 +96,7 @@
 
 <div class="container">
 <header>
-    <h1>DUCO Dashboard made by powina1986</h1>
+    <h1>DUCO Dashboard made by powina1986 v1.1</h1>
 <div class="status-line">
     Duco User Name: <input type="text" id="user-input" value="" 
            style="background: #0d1117; color: var(--accent-blue); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; font-weight: bold; width: 90px;">
@@ -197,37 +197,43 @@
 <script>
     // Używamy LET, żeby dało się zmieniać wartości
     let USER = ""; 
+	let balanceAtStart = -1; 
+	let timeAtStart = Date.now();
     let accountCreatedDate = new Date("2026-03-05");
 	let lastRejectedTotal = 0;
 
-    function changeUser() {
+function changeUser() {
         const inputVal = document.getElementById('user-input').value.trim();
         const dateVal = document.getElementById('date-input').value;
 
         if (inputVal && inputVal !== "") {
             USER = inputVal;
             
-            // Jeśli w kalendarzu jest data, parsujemy ją
             if (dateVal) {
                 accountCreatedDate = new Date(dateVal);
             }
 
-            // RESET WSZYSTKIEGO (żeby nie było błędów w obliczeniach)
+            // RESET WSZYSTKIEGO
             hData = []; 
             hLabels = [];
             totalHashSum = 0;
             readingCount = 0;
             initialAccepted = -1;
             minerStats = {};
-			lastRejectedTotal = 0;
+            lastRejectedTotal = 0;
+            
+            // --- NOWE RESETOWANIE DLA ZYSKU ---
+            balanceAtStart = -1;
+            timeAtStart = Date.now();
+            // ----------------------------------
+
             document.getElementById('logs-body').innerHTML = '<tr><td colspan="2" style="text-align:center">No issue</td></tr>';
             
-            // Ważne: czyścimy wykres przed update
             chart.data.labels = hLabels;
             chart.data.datasets[0].data = hData;
             chart.update(); 
 
-            update(); // Odpalamy pobieranie danych
+            update(); 
             console.log("Przełączono na: " + USER);
         }
     }
@@ -391,8 +397,23 @@ miners.forEach((m, index) => {
             document.getElementById('live-time').innerText = now;
             document.getElementById('shares-table').querySelector('tbody').innerHTML = rows;
 
-            const estProfit = (khs / 100) * 7.5; 
-            document.getElementById('profit-val').innerText = `${estProfit.toFixed(2)} Đ`;
+            //const estProfit = (khs / 100) * 7.5; 
+			// --- NOWA LOGIKA EST. PROFIT (BAZOWANA NA PRZYROŚCIE) ---
+			let currentBalance = bal.balance;
+			if (balanceAtStart === -1) balanceAtStart = currentBalance;
+
+			let minutesPassed = (Date.now() - timeAtStart) / 60000;
+			let earnedSoFar = currentBalance - balanceAtStart;
+			let estProfit = 0;
+
+			if (minutesPassed > 0.5) { // Zacznij liczyć po 30 sekundach od startu
+			estProfit = (earnedSoFar / minutesPassed) * 1440;
+			} else {
+			// Tymczasowy szacunek przez pierwsze 30 sekund (stary wzór)
+			estProfit = (khs / 100) * 7.5;
+			}
+			document.getElementById('profit-val').innerText = `${estProfit.toFixed(2)} Đ`;
+			// --- KONIEC NOWEJ LOGIKI ---
             document.getElementById('net-share').innerText = `${((khs/2800000)*100).toFixed(6)}%`;
 
 // Logika etykiet: Pełna godzina tylko dla Startu i co kilka punktów, żeby nie było ścisku
